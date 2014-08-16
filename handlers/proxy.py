@@ -5,24 +5,65 @@
 #         http://binux.me
 # Created on 2012-12-15 17:18:55
 
+import json
 import base64
 from .base import *
 from tornado import gen
 import tornado.httpclient
 
 class ProxyHandler(BaseHandler):
-    @gen.coroutine
     def get(self):
+        method = self.request.method
+        url = self.request.uri
+        headers = self.request.headers
+        body = self.request.body
+
+        if self.request.uri.startswith('http'):
+            return self.proxy(method, url, headers, body)
+
+        method = self.get_argument('method', method)
+        url = self.get_argument('url', url)
+        
+        request = json.loads(self.get_argument('request', "{}"))
+        url = request.get('url', url)
+        method = request.get('method', method)
+        headers = request.get('headers', headers)
+        body = request.get('body', body)
+
+        if 'del_headers' in request:
+            for key in request['del_headers']:
+                if key in headers:
+                    del headers[key]
+
+        if 'Host' in headers:
+            del headers['Host']
+        if body.startswith('base64,'):
+            try:
+                body = body[7:].decode('base64')
+            except:
+                pass
+
+        if not url.startswith('http'):
+            self.finish('hello world!')
+            return
+
+        self.request.method = method
+        self.request.uri = url
+
+        return self.proxy(method, url, headers, body)
+
+    @gen.coroutine
+    def proxy(self, method, url, headers, body):
         if options.username:
             auth = 'Basic %s' % base64.b64encode('%s:%s' % (options.username, options.password))
             if self.request.headers.get('Proxy-Authorization') != auth:
                 raise HTTPError(407)
 
         req = tornado.httpclient.HTTPRequest(
-                url = self.request.uri,
-                method = self.request.method,
-                body = self.request.body,
-                headers = self.request.headers,
+                method = method,
+                url = url,
+                headers = headers,
+                body = body,
                 decompress_response = False,
                 follow_redirects = False,
                 allow_nonstandard_methods = True)
