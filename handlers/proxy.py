@@ -5,44 +5,45 @@
 #         http://binux.me
 # Created on 2012-12-15 17:18:55
 
+import base64
 from .base import *
+from tornado import gen
 import tornado.httpclient
 
 class ProxyHandler(BaseHandler):
-    @tornado.web.asynchronous
+    @gen.coroutine
     def get(self):
+        if options.username:
+            auth = 'Basic %s' % base64.b64encode('%s:%s' % (options.username, options.password))
+            if self.request.headers.get('Proxy-Authorization') != auth:
+                raise HTTPError(407)
+
         req = tornado.httpclient.HTTPRequest(
                 url = self.request.uri,
                 method = self.request.method,
                 body = self.request.body,
                 headers = self.request.headers,
-                use_gzip = False,
+                decompress_response = False,
                 follow_redirects = False,
                 allow_nonstandard_methods = True)
 
         client = tornado.httpclient.AsyncHTTPClient()
         try:
-            client.fetch(req, self.on_response)
+            result = yield client.fetch(req)
         except tornado.httpclient.HTTPError, e:
-            if hasattr(e, 'response') and e.response:
-                self.on_response(e.response)
+            if e.response:
+                result = e.response
             else:
                 self.set_status(502)
                 self.write('Bad Gateway error:\n' + str(e))
                 self.finish()
+                return
 
-    def on_response(self, response):
-        if response.error:
-            self.set_status(502)
-            self.write('Bad Gateway error:\n' + str(response.error))
-            self.finish()
-        else:
-            self.set_status(response.code)
-            for key, value in response.headers.iteritems():
-                self.set_header(key, value)
-            if response.body:
-                self._write_buffer.append(response.body)
-            self.finish()
+        self.set_status(result.code, result.reason)
+        if result.headers.get('Transfer-Encoding') == 'chunked':
+            del result.headers['Transfer-Encoding']
+        self._headers = result.headers
+        self.finish(result.body)
 
     put = get
     post = get

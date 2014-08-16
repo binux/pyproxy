@@ -13,6 +13,8 @@ from proxy_handler import ProxyHandler
 
 define("bind", default="127.0.0.1", help="addrs that debugger bind to")
 define("port", default=8888, help="the port that debugger listen to")
+define("username", default="", help="proxy username")
+define("password", default="", help="proxy password")
 define("debug", default=False, help="debug mode")
 define("config", default="", help="config file")
 
@@ -23,7 +25,6 @@ class Application(tornado.web.Application):
                 template_path = os.path.join(os.path.dirname(__file__), "tpl"),
                 static_path = os.path.join(os.path.dirname(__file__), "static"),
                 debug = options.debug,
-                gzip = True,
 
                 ui_modules = ui_modules,
                 ui_methods = ui_methods,

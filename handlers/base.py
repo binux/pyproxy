@@ -18,7 +18,7 @@ class BaseHandler(tornado.web.RequestHandler):
     def __getattr__(self, key):
         if key in self.application_export:
             return getattr(self.application, key)
-        super(BaseHandler, self).__getattr__(key)
+        raise AttributeError(key)
 
     def render_string(self, template_name, **kwargs):
         if "options" not in kwargs:
