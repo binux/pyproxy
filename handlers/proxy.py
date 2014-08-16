@@ -24,7 +24,10 @@ class ProxyHandler(BaseHandler):
         method = self.get_argument('method', method)
         url = self.get_argument('url', url)
         
-        request = json.loads(self.get_argument('request', "{}"))
+        try:
+            request = json.loads(self.get_argument('request'))
+        except:
+            request = {}
         url = request.get('url', url)
         method = request.get('method', method)
         headers = request.get('headers', headers)
@@ -54,10 +57,8 @@ class ProxyHandler(BaseHandler):
 
     @gen.coroutine
     def proxy(self, method, url, headers, body):
-        if options.username:
-            auth = 'Basic %s' % base64.b64encode('%s:%s' % (options.username, options.password))
-            if self.request.headers.get('Proxy-Authorization') != auth:
-                raise HTTPError(407)
+        if not self.auth():
+            raise HTTPError(404)
 
         req = tornado.httpclient.HTTPRequest(
                 method = method,
@@ -89,6 +90,41 @@ class ProxyHandler(BaseHandler):
     put = get
     post = get
     option = get
+
+    def auth(self):
+        if not options.username:
+            return True
+
+        username, password = None, None
+
+        if 'Proxy-Authorization' in self.request.headers:
+            try:
+                method, b64 = self.request.headers['Proxy-Authorization'].split(' ', 1)
+                username, password = b64.decode('base64').split(':', 1)
+            except:
+                pass
+
+        if 'Authorization' in self.request.headers:
+            try:
+                method, b64 = self.request.headers['Authorization'].split(' ', 1)
+                username, password = b64.decode('base64').split(':', 1)
+            except:
+                pass
+
+        username = self.get_argument('username', username)
+        password = self.get_argument('password', password)
+
+        try:
+            request = json.loads(self.get_argument('request'))
+        except:
+            request = {}
+        username = request.get('username', username)
+        password = request.get('username', password)
+
+        if options.username == username and options.password == password:
+            return True
+
+        return False
         
 handlers = [
         (".*", ProxyHandler),
