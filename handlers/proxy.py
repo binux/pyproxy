@@ -103,7 +103,7 @@ class ProxyHandler(BaseHandler):
             set_cookie = result.headers.get_list('set-cookie')
             del result.headers['set-cookie']
             for each in set_cookie:
-                result.headers.add('set-cookie', set_cookie_re.sub('', each))
+                result.headers.add('set-cookie', self.set_cookie_re.sub('', each))
         self._headers = result.headers
         self.finish(result.body)
 
