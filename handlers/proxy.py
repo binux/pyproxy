@@ -5,6 +5,7 @@
 #         http://binux.me
 # Created on 2012-12-15 17:18:55
 
+import re
 import json
 import base64
 import hashlib
@@ -14,6 +15,8 @@ from tornado import gen
 import tornado.httpclient
 
 class ProxyHandler(BaseHandler):
+    set_cookie_re = re.compile(";?\s*(domain|path)\s*=\s*[^,;]+", re.I)
+
     def get(self):
         method = self.request.method
         url = self.request.uri
@@ -68,7 +71,7 @@ class ProxyHandler(BaseHandler):
             }
 
     @gen.coroutine
-    def proxy(self, method, url, headers, body):
+    def proxy(self, method, url, headers, body, **kwargs):
         if not self.auth(url):
             raise HTTPError(403)
 
@@ -96,6 +99,11 @@ class ProxyHandler(BaseHandler):
         self.set_status(result.code, result.reason)
         if result.headers.get('Transfer-Encoding') == 'chunked':
             del result.headers['Transfer-Encoding']
+        if 'set-cookie' in result.headers:
+            set_cookie = result.headers.get_list('set-cookie')
+            del result.headers['set-cookie']
+            for each in set_cookie:
+                result.headers.add('set-cookie', set_cookie_re.sub('', each))
         self._headers = result.headers
         self.finish(result.body)
 
