@@ -7,6 +7,8 @@
 
 import json
 import base64
+import hashlib
+import urlparse
 from .base import *
 from tornado import gen
 import tornado.httpclient
@@ -46,19 +48,29 @@ class ProxyHandler(BaseHandler):
             except:
                 pass
 
+        if self.request.path == '/sign' and self.auth(url):
+            return self.finish(self.sign(url))
+
         if not url.startswith('http'):
-            self.finish('hello world!')
-            return
+            return self.finish('hello world!')
 
         self.request.method = method
         self.request.uri = url
 
         return self.proxy(method, url, headers, body)
 
+    def sign(self, url):
+        parsed = urlparse.urlparse(url)
+        return {
+            'host_sign': hashlib.md5('%s:%s:%s' % (options.username, options.password, parsed.netloc)).hexdigest()[5:11],
+            'path_sign': hashlib.md5('%s:%s:%s:%s' % (options.username, options.password, parsed.netloc, parsed.path)).hexdigest()[5:11],
+            'url_sign': hashlib.md5('%s:%s:%s' % (options.username, options.password, url)).hexdigest()[5:11],
+            }
+
     @gen.coroutine
     def proxy(self, method, url, headers, body):
-        if not self.auth():
-            raise HTTPError(404)
+        if not self.auth(url):
+            raise HTTPError(403)
 
         req = tornado.httpclient.HTTPRequest(
                 method = method,
@@ -91,7 +103,7 @@ class ProxyHandler(BaseHandler):
     post = get
     option = get
 
-    def auth(self):
+    def auth(self, url):
         if not options.username:
             return True
 
@@ -123,6 +135,12 @@ class ProxyHandler(BaseHandler):
 
         if options.username == username and options.password == password:
             return True
+
+        # auth by sign
+        sign = self.sign(url)
+        for key, value in sign.iteritems():
+            if request.get(key, self.get_argument(key, None)) == value:
+                return True
 
         return False
         
