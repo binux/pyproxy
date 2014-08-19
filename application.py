@@ -9,7 +9,6 @@ import os.path
 import logging
 import tornado.web
 from tornado.options import define, options
-from proxy_handler import ProxyHandler
 
 define("bind", default="127.0.0.1", help="addrs that debugger bind to")
 define("port", default=8888, help="the port that debugger listen to")
@@ -30,13 +29,6 @@ class Application(tornado.web.Application):
                 ui_methods = ui_methods,
                 )
         super(Application, self).__init__(handlers, **settings)
-
-    def __call__(self, request):
-        if not request.uri.startswith('http'):
-            super(Application, self).__call__(request)
-
-        handler = ProxyHandler(request)
-        handler._execute()
 
 if __name__ == "__main__":
     import tornado.options
