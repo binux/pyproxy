@@ -62,6 +62,10 @@ class ProxyHandler(BaseHandler):
 
         return self.proxy(method, url, headers, body)
 
+    put = get
+    post = get
+    option = get
+
     def sign(self, url):
         parsed = urlparse.urlparse(url)
         return {
@@ -106,10 +110,6 @@ class ProxyHandler(BaseHandler):
                 result.headers.add('set-cookie', self.set_cookie_re.sub('', each))
         self._headers = result.headers
         self.finish(result.body)
-
-    put = get
-    post = get
-    option = get
 
     def auth(self, url):
         if not options.username:
