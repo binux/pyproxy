@@ -7,14 +7,18 @@
 
 import re
 import json
+import socket
 import base64
 import hashlib
 import urlparse
 from .base import *
 from tornado import gen
+from tornado.ioloop import IOLoop
+import tornado.tcpclient
 import tornado.httpclient
 
 class ProxyHandler(BaseHandler):
+    SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT', 'PUT', 'OPTION']
     set_cookie_re = re.compile(";?\s*(domain|path)\s*=\s*[^,;]+", re.I)
 
     def get(self):
@@ -160,6 +164,32 @@ class ProxyHandler(BaseHandler):
                 return True
 
         return False
+
+    @gen.coroutine
+    def connect(self):
+        url = self.request.uri
+        if not self.auth(url):
+            raise HTTPError(403)
+
+        try:
+            host, port = self.request.uri.split(':')
+            remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(host, int(port)))
+        except gen.TimeoutError as e:
+            raise HTTPError(504)
+
+        self._auto_finish = False
+        client = self.request.connection.detach()
+        yield client.write('HTTP/1.0 200 Connection established\r\n\r\n')
+
+        fw = remote.set_close_callback(gen.Callback(remote))
+        client.read_until_close(lambda x: x, streaming_callback=lambda x: remote.write(x))
+        remote.read_until_close(lambda x: x, streaming_callback=lambda x: client.write(x))
+
+        yield [
+                gen.Task(client.set_close_callback),
+                gen.Task(remote.set_close_callback),
+                ]
+        self._log()
         
 handlers = [
         (".*", ProxyHandler),
