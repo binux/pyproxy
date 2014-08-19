@@ -20,34 +20,34 @@ Options:
 API
 ===
 
-1. Use as http proxy
+1 Use as http/https proxy
 
 `curl -x http://localhost:8888/ http://httpbin.org/get`
 
-2. with GET/POST parameters
+2 with GET/POST parameters
 
 `curl http://localhost:8888/anypath?method=POST&url=http://httpbin.org/post`
 
-3. pass params with JSON (work with GET parameters as well)
+3 pass params with JSON (work with GET parameters as well)
 
 `curl -d '{"url": "http://httpbin.org/get","method": "GET", "headers": {"User-Agent":"Baidu"}}' http://localhost:8888/?callback=callback`
 
 Auth
 ====
 
-1. http proxy auth
+1 http proxy auth
 
 `curl -x http://username:password@localhost:8888/ http://httpbin.org/get`
 
-2. http basic auth
+2 http basic auth
 
 `curl http://username:password@localhost:8888/anypath?method=POST&url=http://httpbin.org/post`
 
-3. username & password in GET/POST parameters / JSON
+3 username & password in GET/POST parameters / JSON
 
 `curl http://localhost:8888/anypath?method=POST&url=http://httpbin.org/post&username=usernmae&password=password`
 
-4. host_sign / path_sign / url_sign
+4 host_sign / path_sign / url_sign
 
 sign a host / path / url with current username/password:
 
