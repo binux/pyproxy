@@ -28,23 +28,26 @@ class ProxyHandler(BaseHandler):
 
         method = self.get_argument('method', method)
         url = self.get_argument('url', url)
+        callback = self.get_argument('callback', None)
         
         try:
-            request = json.loads(self.get_argument('request'))
+            request = json.loads(self.get_argument('request', self.request.body))
         except:
             request = {}
         url = request.get('url', url)
         method = request.get('method', method)
         headers = request.get('headers', headers)
         body = request.get('body', body)
+        callback = request.get('callback', callback)
 
         if 'del_headers' in request:
             for key in request['del_headers']:
                 if key in headers:
                     del headers[key]
 
-        if 'Host' in headers:
-            del headers['Host']
+        for keyword in ('Host', 'Content-Type', 'Content-Length'):
+            if keyword in headers:
+                del headers[keyword]
         if body.startswith('base64,'):
             try:
                 body = body[7:].decode('base64')
@@ -60,7 +63,7 @@ class ProxyHandler(BaseHandler):
         self.request.method = method
         self.request.uri = url
 
-        return self.proxy(method, url, headers, body)
+        return self.proxy(method, url, headers, body, _callback=callback)
 
     put = get
     post = get
@@ -91,14 +94,14 @@ class ProxyHandler(BaseHandler):
         client = tornado.httpclient.AsyncHTTPClient()
         try:
             result = yield client.fetch(req)
-        except tornado.httpclient.HTTPError, e:
+        except tornado.httpclient.HTTPError as e:
             if e.response:
                 result = e.response
             else:
                 self.set_status(502)
                 self.write('Bad Gateway error:\n' + str(e))
                 self.finish()
-                return
+                raise gen.Return()
 
         self.set_status(result.code, result.reason)
         if result.headers.get('Transfer-Encoding') == 'chunked':
@@ -108,8 +111,14 @@ class ProxyHandler(BaseHandler):
             del result.headers['set-cookie']
             for each in set_cookie:
                 result.headers.add('set-cookie', self.set_cookie_re.sub('', each))
-        self._headers = result.headers
-        self.finish(result.body)
+
+        print kwargs
+        if kwargs.get('_callback'):
+            self.set_header('Content-Type', 'application/javascript')
+            self.finish('%s(%s)' % (json.dumps(kwargs['_callback']), json.dumps(result.body)))
+        else:
+            self._headers = result.headers
+            self.finish(result.body)
 
     def auth(self, url):
         if not options.username:
