@@ -210,7 +210,7 @@ class Application(tornado.web.Application):
                 )
         super(Application, self).__init__([ (".*", ProxyHandler), ], **settings)
 
-if __name__ == "__main__":
+def main():
     import tornado.options
     from tornado.ioloop import IOLoop
     from tornado.httpserver import HTTPServer
@@ -226,3 +226,6 @@ if __name__ == "__main__":
 
     logging.info("http server started on %s:%s" % (options.bind, options.port))
     IOLoop.instance().start()
+
+if __name__ == "__main__":
+    main()
