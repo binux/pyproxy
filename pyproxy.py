@@ -142,29 +142,31 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         username, password = None, None
 
-        if 'Proxy-Authorization' in self.request.headers:
+        if not (username and password) and 'Proxy-Authorization' in self.request.headers:
             try:
                 method, b64 = self.request.headers['Proxy-Authorization'].split(' ', 1)
                 username, password = b64.decode('base64').split(':', 1)
             except:
                 pass
 
-        if 'Authorization' in self.request.headers:
+        if not (username and password) and 'Authorization' in self.request.headers:
             try:
                 method, b64 = self.request.headers['Authorization'].split(' ', 1)
                 username, password = b64.decode('base64').split(':', 1)
             except:
                 pass
 
-        username = self.get_argument('username', username)
-        password = self.get_argument('password', password)
+        if not (username and password):
+            username = self.get_argument('username', username)
+            password = self.get_argument('password', password)
 
-        try:
-            request = json.loads(self.get_argument('request'))
-        except:
-            request = {}
-        username = request.get('username', username)
-        password = request.get('username', password)
+        if not (username and password):
+            try:
+                request = json.loads(self.get_argument('request'))
+            except:
+                request = {}
+            username = request.get('username', username)
+            password = request.get('username', password)
 
         if options.username == username and options.password == password:
             return True
