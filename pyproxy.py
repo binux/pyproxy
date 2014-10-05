@@ -128,7 +128,6 @@ class ProxyHandler(tornado.web.RequestHandler):
             for each in set_cookie:
                 result.headers.add('set-cookie', self.set_cookie_re.sub('', each))
 
-        print kwargs
         if kwargs.get('_callback'):
             self.set_header('Content-Type', 'application/javascript')
             self.finish('%s(%s)' % (json.dumps(kwargs['_callback']), json.dumps(result.body)))
