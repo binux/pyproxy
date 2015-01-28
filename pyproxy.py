@@ -5,7 +5,6 @@
 #         http://binux.me
 # Created on 2012-12-15 16:11:13
 
-import os.path
 import logging
 import tornado.web
 from tornado.options import define, options
@@ -19,15 +18,17 @@ define("config", default="", help="config file")
 
 import re
 import json
-import socket
-import base64
 import hashlib
-import urlparse
+try:
+    from urlparse import urlparse
+except ImportError:
+    from urllib.parse import urlparse
 from tornado import gen
 from tornado.web import HTTPError
 from tornado.ioloop import IOLoop
 import tornado.tcpclient
 import tornado.httpclient
+
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT', 'PUT', 'OPTION']
@@ -86,7 +87,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     option = get
 
     def sign(self, url):
-        parsed = urlparse.urlparse(url)
+        parsed = urlparse(url)
         return {
             'host_sign': hashlib.md5('%s:%s:%s' % (options.username, options.password, parsed.netloc)).hexdigest()[5:11],
             'path_sign': hashlib.md5('%s:%s:%s:%s' % (options.username, options.password, parsed.netloc, parsed.path)).hexdigest()[5:11],
@@ -192,7 +193,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         self._auto_finish = False
         client = self.request.connection.detach()
-        yield client.write('HTTP/1.0 200 Connection established\r\n\r\n')
+        yield client.write(b'HTTP/1.0 200 Connection established\r\n\r\n')
 
         fw = remote.set_close_callback(gen.Callback(remote))
         client.read_until_close(lambda x: x, streaming_callback=lambda x: remote.write(x))
