@@ -5,7 +5,7 @@
 #         http://binux.me
 # Created on 2015-01-28 21:31:13
 
-from setuptools import setup, find_packages
+from setuptools import setup
 from codecs import open
 from os import path
 
@@ -16,7 +16,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pyproxy',
-    version='0.1.3',
+    version='0.1.4',
 
     description='HTTP(s) proxy server base on tornado, in one file!',
     long_description=long_description,

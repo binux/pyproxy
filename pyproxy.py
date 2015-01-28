@@ -89,9 +89,15 @@ class ProxyHandler(tornado.web.RequestHandler):
     def sign(self, url):
         parsed = urlparse(url)
         return {
-            'host_sign': hashlib.md5('%s:%s:%s' % (options.username, options.password, parsed.netloc)).hexdigest()[5:11],
-            'path_sign': hashlib.md5('%s:%s:%s:%s' % (options.username, options.password, parsed.netloc, parsed.path)).hexdigest()[5:11],
-            'url_sign': hashlib.md5('%s:%s:%s' % (options.username, options.password, url)).hexdigest()[5:11],
+            'host_sign': hashlib.md5(
+                ('%s:%s:%s' % (options.username, options.password, parsed.netloc)).encode('utf8')
+            ).hexdigest()[5:11],
+            'path_sign': hashlib.md5(
+                ('%s:%s:%s:%s' % (options.username, options.password, parsed.netloc, parsed.path)).encode('utf8')
+            ).hexdigest()[5:11],
+            'url_sign': hashlib.md5(
+                ('%s:%s:%s' % (options.username, options.password, url)).encode('utf8')
+            ).hexdigest()[5:11],
             }
 
     @gen.coroutine
@@ -173,7 +179,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         # auth by sign
         sign = self.sign(url)
-        for key, value in sign.iteritems():
+        for key, value in sign.items():
             if request.get(key, self.get_argument(key, None)) == value:
                 return True
 
