@@ -5,8 +5,6 @@
 #         http://binux.me
 # Created on 2012-12-15 16:11:13
 
-__version__ = '0.1'
-
 import logging
 import tornado.web
 from tornado.options import define, options

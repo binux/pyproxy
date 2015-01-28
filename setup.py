@@ -14,10 +14,9 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 
-import pyproxy
 setup(
     name='pyproxy',
-    version=pyproxy.__version__,
+    version='0.1',
 
     description='An HTTP proxy server with API on tornado, just in one file!',
     long_description=long_description,
