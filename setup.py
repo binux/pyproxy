@@ -16,7 +16,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='pyproxy',
-    version='0.1.1',
+    version='0.1.3',
 
     description='HTTP(s) proxy server base on tornado, in one file!',
     long_description=long_description,
@@ -47,7 +47,7 @@ setup(
 
     keywords='proxy https http',
 
-    packages=find_packages(exclude=[]),
+    py_modules=['pyproxy'],
 
     install_requires=[
         'tornado>=2.1.1',
