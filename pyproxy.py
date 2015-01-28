@@ -212,7 +212,7 @@ class Application(tornado.web.Application):
                 )
         super(Application, self).__init__([ (".*", ProxyHandler), ], **settings)
 
-def main():
+def main(**kwargs):
     import tornado.options
     from tornado.ioloop import IOLoop
     from tornado.httpserver import HTTPServer
@@ -221,6 +221,9 @@ def main():
     if options.config:
         tornado.options.parse_config_file(options.config)
     tornado.options.parse_command_line()
+
+    for key in kwargs:
+        setattr(options, key, kwargs[key])
 
     http_server = HTTPServer(Application(), xheaders=True)
     http_server.bind(options.port, options.bind)
