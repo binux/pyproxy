@@ -2,7 +2,7 @@ Usage
 =====
 
 ```
-Usage: ./application.py [OPTIONS]
+Usage: pyproxy [OPTIONS]
 
 Options:
 

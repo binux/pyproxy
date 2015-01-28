@@ -18,7 +18,7 @@ setup(
     name='pyproxy',
     version='0.1',
 
-    description='An HTTP proxy server with API on tornado, just in one file!',
+    description='HTTP(s) proxy server base on tornado, in one file!',
     long_description=long_description,
 
     url='https://github.com/binux/pyproxy',
