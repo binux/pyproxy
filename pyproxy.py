@@ -7,6 +7,7 @@
 
 import logging
 import tornado.web
+from base64 import b64decode
 from tornado.options import define, options
 
 define("bind", default="127.0.0.1", help="addrs that debugger bind to")
@@ -67,7 +68,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                 del headers[keyword]
         if body.startswith('base64,'):
             try:
-                body = body[7:].decode('base64')
+                body = b64decode(body[7:])
             except:
                 pass
 
@@ -151,14 +152,15 @@ class ProxyHandler(tornado.web.RequestHandler):
         if not (username and password) and 'Proxy-Authorization' in self.request.headers:
             try:
                 method, b64 = self.request.headers['Proxy-Authorization'].split(' ', 1)
-                username, password = b64.decode('base64').split(':', 1)
+                username, password = b64decode(b64).split(':', 1)
             except:
                 pass
+            del self.request.headers['Proxy-Authorization']
 
         if not (username and password) and 'Authorization' in self.request.headers:
             try:
                 method, b64 = self.request.headers['Authorization'].split(' ', 1)
-                username, password = b64.decode('base64').split(':', 1)
+                username, password = b64decode(b64).split(':', 1)
             except:
                 pass
 
@@ -166,11 +168,12 @@ class ProxyHandler(tornado.web.RequestHandler):
             username = self.get_argument('username', username)
             password = self.get_argument('password', password)
 
+        request = {}
         if not (username and password):
             try:
                 request = json.loads(self.get_argument('request'))
             except:
-                request = {}
+                pass
             username = request.get('username', username)
             password = request.get('username', password)
 
