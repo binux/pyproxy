@@ -32,8 +32,24 @@ import tornado.httpclient
 
 
 class ProxyHandler(tornado.web.RequestHandler):
-    SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT', 'PUT', 'OPTION']
+    SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT', 'PUT', 'OPTIONS']
     set_cookie_re = re.compile(";?\s*(domain|path)\s*=\s*[^,;]+", re.I)
+
+    def options(self):
+        cors = self.get_argument('cors', None)
+        if not cors:
+            return self.get()
+
+        self.set_header('Access-Control-Allow-Credentials', 'true')
+        self.set_header('Access-Control-Max-Age', 86400)
+        if 'Access-Control-Request-Headers' in self.request.headers:
+            self.set_header('Access-Control-Allow-Headers',
+                            self.request.headers.get('Access-Control-Request-Headers'))
+        if 'Access-Control-Request-Method' in self.request.headers:
+            self.set_header('Access-Control-Allow-Methods',
+                            self.request.headers.get('Access-Control-Request-Method'))
+        self.set_status(204)
+        self.finish()
 
     def get(self):
         method = self.request.method
@@ -47,7 +63,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         method = self.get_argument('method', method)
         url = self.get_argument('url', url)
         callback = self.get_argument('callback', None)
-        
+
         try:
             request = json.loads(self.get_argument('request', self.request.body))
         except:
@@ -85,7 +101,6 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     put = get
     post = get
-    option = get
 
     def sign(self, url):
         parsed = urlparse(url)
@@ -140,6 +155,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.set_header('Content-Type', 'application/javascript')
             self.finish('%s(%s)' % (kwargs['_callback'], json.dumps(result.body)))
         else:
+            cors = self.get_argument('cors', None)
+            if cors:
+                result.headers["Access-Control-Allow-Origin"] = "*"
             self._headers = result.headers
             self.finish(result.body)
 
