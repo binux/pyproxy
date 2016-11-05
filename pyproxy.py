@@ -32,7 +32,7 @@ import tornado.httpclient
 
 
 class ProxyHandler(tornado.web.RequestHandler):
-    SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT', 'PUT', 'OPTIONS']
+    SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'CONNECT', 'PUT', 'OPTIONS']
     set_cookie_re = re.compile(";?\s*(domain|path)\s*=\s*[^,;]+", re.I)
 
     def options(self):
@@ -101,6 +101,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     put = get
     post = get
+    head = get
 
     def sign(self, url):
         parsed = urlparse(url)
@@ -165,7 +166,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             if cors:
                 result.headers["Access-Control-Allow-Origin"] = "*"
             self._headers = result.headers
-            self.finish(result.body)
+            if result.code == 304:
+                self.finish()
+            else:
+                self.finish(result.body)
 
     def auth(self, url):
         if not options.username:
