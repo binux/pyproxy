@@ -58,7 +58,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         body = self.request.body
 
         if self.request.uri.startswith('http'):
-            return self.proxy(method, url, headers, body)
+            return self.proxy(method, url, headers, body, http_proxy=True)
 
         method = self.get_argument('method', method)
         url = self.get_argument('url', url)
@@ -119,10 +119,13 @@ class ProxyHandler(tornado.web.RequestHandler):
     @gen.coroutine
     def proxy(self, method, url, headers, body, **kwargs):
         if not self.auth(url):
-            self.set_header('Proxy-Authenticate', 'Basic realm="hello"')
-            self.set_status(407)
-            self.finish()
-            raise gen.Return()
+            if kwargs.get('http_proxy'):
+                self.set_header('Proxy-Authenticate', 'Basic realm="hello"')
+                self.set_status(407)
+                self.finish()
+                raise gen.Return()
+            else:
+                raise HTTPError(403)
 
         req = tornado.httpclient.HTTPRequest(
                 method = method,
