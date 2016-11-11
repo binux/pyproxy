@@ -197,8 +197,8 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         if not (username and password) and 'Proxy-Authorization' in self.request.headers:
             try:
-                method, b64 = self.request.headers['Proxy-Authorization'].split(' ', 1)
-                username, password = b64decode(b64).decode('utf8').split(':', 1)
+                method, b64 = self.request.headers['Proxy-Authorization'].strip().split(' ', 1)
+                username, password = b64decode(b64.split(',', 1)[0]).decode('utf8').split(':', 1)
             except:
                 raise
                 pass
