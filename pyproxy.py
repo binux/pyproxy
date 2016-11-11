@@ -142,12 +142,14 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._auto_finish = False
 
             stream = self.request.connection.detach()
-            req.header_callback = lambda line, stream=stream: stream.write(line) if not line.startswith('Transfer-Encoding') else None
-            req.streaming_callback = lambda chunk, stream=stream: stream.write(chunk)
+            req.header_callback = lambda line, stream=stream: not stream.closed() and stream.write(line) if not line.startswith('Transfer-Encoding') else None
+            req.streaming_callback = lambda chunk, stream=stream: not stream.closed() and stream.write(chunk)
 
             client = tornado.httpclient.AsyncHTTPClient()
             try:
                 result = yield client.fetch(req)
+            except tornado.httpclient.HTTPError as e:
+                pass
             finally:
                 stream.close()
             self._log()
@@ -252,9 +254,10 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.detach()
         yield client.write(b'HTTP/1.0 200 Connection established\r\n\r\n')
 
-        fw = remote.set_close_callback(gen.Callback(remote))
-        client.read_until_close(lambda x: x, streaming_callback=lambda x: remote.write(x))
-        remote.read_until_close(lambda x: x, streaming_callback=lambda x: client.write(x))
+        client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
+        client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
+        remote.set_close_callback(lambda client=client: not client.closed() and client.close())
+        remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
 
         yield [
                 gen.Task(client.set_close_callback),
