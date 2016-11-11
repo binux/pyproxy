@@ -137,6 +137,22 @@ class ProxyHandler(tornado.web.RequestHandler):
                 follow_redirects = False,
                 allow_nonstandard_methods = True)
 
+        if kwargs.get('http_proxy'):
+            # streaming in http proxy mode
+            self._auto_finish = False
+
+            stream = self.request.connection.detach()
+            req.header_callback = lambda line, stream=stream: stream.write(line) if not line.startswith('Transfer-Encoding') else None
+            req.streaming_callback = lambda chunk, stream=stream: stream.write(chunk)
+
+            client = tornado.httpclient.AsyncHTTPClient()
+            try:
+                result = yield client.fetch(req)
+            finally:
+                stream.close()
+            self._log()
+            return
+
         client = tornado.httpclient.AsyncHTTPClient()
         try:
             result = yield client.fetch(req)
