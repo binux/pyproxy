@@ -16,7 +16,7 @@ define("username", default="", help="proxy username")
 define("password", default="", help="proxy password")
 define("debug", default=False, help="debug mode")
 define("config", default="", help="config file")
-define('forward-proxy', default="", help="pass request to another proxy with format "
+define('forward', default="", help="pass request to another proxy with format "
        "[https?://][username:password@]host:port (or a file wilth multiple proxies)")
 
 import os
@@ -316,18 +316,18 @@ class ProxyHandler(tornado.web.RequestHandler):
 class Application(tornado.web.Application):
     def __init__(self):
         forward_proxies = []
-        if options.forward_proxy:
-            if os.path.exists(options.forward_proxy):
-                with open(options.forward_proxy) as fp:
+        if options.forward:
+            if os.path.exists(options.forward):
+                with open(options.forward) as fp:
                     for line in fp:
                         url = urlsplit(line)
                         if not url.hostname:
                             continue
                         forward_proxies.append(url)
-            elif urlsplit(options.forward_proxy):
-                forward_proxies.append(urlsplit(options.forward_proxy))
+            elif urlsplit(options.forward):
+                forward_proxies.append(urlsplit(options.forward))
             else:
-                raise Exception('unknown proxy %s' % options.forward_proxy)
+                raise Exception('unknown proxy %s' % options.forward)
         self.forward_proxies = forward_proxies
 
         settings = dict(
