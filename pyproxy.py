@@ -7,7 +7,7 @@
 
 import logging
 import tornado.web
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from tornado.options import define, options
 
 define("bind", default="127.0.0.1", help="addrs that debugger bind to")
@@ -16,17 +16,22 @@ define("username", default="", help="proxy username")
 define("password", default="", help="proxy password")
 define("debug", default=False, help="debug mode")
 define("config", default="", help="config file")
+define('forward-proxy', default="", help="pass request to another proxy with format "
+       "[https?://][username:password@]host:port (or a file wilth multiple proxies)")
 
+import os
 import re
 import json
+import random
 import hashlib
 try:
-    from urlparse import urlparse
+    from urlparse import urlparse, urlsplit
 except ImportError:
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlsplit
 from tornado import gen
 from tornado.web import HTTPError
 from tornado.ioloop import IOLoop
+import tornado.httputil
 import tornado.tcpclient
 import tornado.httpclient
 
@@ -137,6 +142,33 @@ class ProxyHandler(tornado.web.RequestHandler):
                 follow_redirects = False,
                 allow_nonstandard_methods = True)
 
+        if self.application.forward_proxies:
+            proxy = random.choice(self.application.forward_proxies)
+            try:
+                remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(
+                    proxy.hostname, int(proxy.port), ssl_options={} if proxy.scheme == 'https' else None))
+                remote.write('%s %s HTTP/1.1\r\n' % (req.method.upper(), req.url))
+                for key, value in tornado.httputil.HTTPHeaders(headers).get_all():
+                    remote.write('%s: %s\r\n' % (key, value))
+                if proxy.username:
+                    remote.write('Proxy-Authorization: Basic %s\r\n' %
+                                 b64encode('%s:%s' % (proxy.username, proxy.password)))
+                remote.write('\r\n')
+                if req.body:
+                    remote.write(body)
+            except gen.TimeoutError:
+                raise HTTPError(504)
+
+            self._auto_finish = False
+            client = self.request.connection.detach()
+            client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
+            client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
+            remote.set_close_callback(lambda client=client: not client.closed() and client.close())
+            remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
+
+            self._log()
+            return
+
         if kwargs.get('http_proxy'):
             # streaming in http proxy mode
             self._auto_finish = False
@@ -244,15 +276,30 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.finish()
             raise gen.Return()
 
-        try:
-            host, port = self.request.uri.split(':')
-            remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(host, int(port)))
-        except gen.TimeoutError as e:
-            raise HTTPError(504)
-
         self._auto_finish = False
         client = self.request.connection.detach()
-        yield client.write(b'HTTP/1.0 200 Connection established\r\n\r\n')
+
+        if self.application.forward_proxies:
+            proxy = random.choice(self.application.forward_proxies)
+            try:
+                remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(
+                    proxy.hostname, int(proxy.port), ssl_options={} if proxy.scheme == 'https' else None))
+                remote.write('CONNECT %s HTTP/1.1\r\n' % self.request.uri)
+                remote.write('Host: %s\r\n' % self.request.uri)
+                if proxy.username:
+                    remote.write('Proxy-Authorization: Basic %s\r\n' %
+                                 b64encode('%s:%s' % (proxy.username, proxy.password)))
+                remote.write('\r\n')
+            except gen.TimeoutError:
+                raise HTTPError(504)
+        else:
+            try:
+                host, port = self.request.uri.split(':')
+                remote = yield gen.with_timeout(IOLoop.current().time()+10,
+                                                tornado.tcpclient.TCPClient().connect(host, int(port)))
+            except gen.TimeoutError:
+                raise HTTPError(504)
+            yield client.write(b'HTTP/1.0 200 Connection established\r\n\r\n')
 
         client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
         client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
@@ -260,17 +307,34 @@ class ProxyHandler(tornado.web.RequestHandler):
         remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
 
         yield [
-                gen.Task(client.set_close_callback),
-                gen.Task(remote.set_close_callback),
-                ]
+            gen.Task(client.set_close_callback),
+            gen.Task(remote.set_close_callback),
+        ]
         self._log()
+
 
 class Application(tornado.web.Application):
     def __init__(self):
+        forward_proxies = []
+        if options.forward_proxy:
+            if os.path.exists(options.forward_proxy):
+                with open(options.forward_proxy) as fp:
+                    for line in fp:
+                        url = urlsplit(line)
+                        if not url.hostname:
+                            continue
+                        forward_proxies.append(url)
+            elif urlsplit(options.forward_proxy):
+                forward_proxies.append(urlsplit(options.forward_proxy))
+            else:
+                raise Exception('unknown proxy %s' % options.forward_proxy)
+        self.forward_proxies = forward_proxies
+
         settings = dict(
-                debug = options.debug,
-                )
-        super(Application, self).__init__([ (".*", ProxyHandler), ], **settings)
+            debug=options.debug,
+        )
+        super(Application, self).__init__([(".*", ProxyHandler), ], **settings)
+
 
 def main(**kwargs):
     import tornado.options
