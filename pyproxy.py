@@ -35,6 +35,11 @@ from tornado.ioloop import IOLoop
 import tornado.httputil
 import tornado.tcpclient
 import tornado.httpclient
+try:
+    import pycurl
+    tornado.httpclient.AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+except ImportError:
+    pycurl = None
 
 def utf8(string):
     if isinstance(string, unicode):
@@ -71,7 +76,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             return self.proxy(method, url, headers, body, http_proxy=True)
 
         method = self.get_argument('method', method)
-        url = self.get_argument('url', url)
+        url = self.get_argument('url', self.get_argument('rl', url))
         callback = self.get_argument('callback', None)
 
         try:
@@ -142,70 +147,76 @@ class ProxyHandler(tornado.web.RequestHandler):
                 method = method,
                 url = url,
                 headers = headers,
-                body = body,
+                body = body or None,
                 decompress_response = False,
                 follow_redirects = False,
                 allow_nonstandard_methods = True)
 
         if self.application.forward_proxies:
             self.via_proxy = proxy = random.choice(self.application.forward_proxies)
-            try:
-                remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(
-                    proxy.hostname, int(proxy.port), ssl_options={} if proxy.scheme == 'https' else None))
-            except gen.TimeoutError:
-                raise HTTPError(504)
-
-            parsed = urlparse(req.url)
-            userpass = None
-            netloc = parsed.netloc
-            if '@' in parsed.netloc:
-                userpass, _, netloc = netloc.rpartition("@")
-            headers = tornado.httputil.HTTPHeaders(headers)
-
-            if parsed.scheme == 'https':
-                # FIXME: doesn't work for https proxy
-                remote.write(utf8('CONNECT %s:%s HTTP/1.1\r\n' % (parsed.hostname, parsed.port or 443)))
-                remote.write(utf8('Host: %s\r\n' % netloc))
-                if proxy.username:
-                    remote.write(utf8('Proxy-Authorization: Basic %s\r\n' %
-                                 b64encode('%s:%s' % (proxy.username, proxy.password))))
-                remote.write('\r\n')
-                yield remote.read_until('\r\n\r\n')
-
-                remote = yield remote.start_tls(False, {}, netloc)
-
-                request_path = parsed.path
-                if parsed.query:
-                    request_path += '?%s' % parsed.query
-                remote.write(utf8('%s %s HTTP/1.1\r\n' % (req.method.upper(), urllib.quote(request_path))))
+            if proxy.scheme != 'https' and pycurl:
+                req.proxy_host = proxy.hostname
+                req.proxy_port = int(proxy.port)
+                req.proxy_username = proxy.username
+                req.proxy_password = proxy.password
             else:
-                remote.write(utf8('%s %s HTTP/1.1\r\n' % (req.method.upper(), req.url)))
-                if proxy.username:
-                    headers['Proxy-Authorization'] = 'Basic %s\r\n' % b64encode('%s:%s' % (proxy.username, proxy.password))
+                try:
+                    remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(
+                        proxy.hostname, int(proxy.port), ssl_options={} if proxy.scheme == 'https' else None))
+                except gen.TimeoutError:
+                    raise HTTPError(504)
 
-            if 'Host' not in headers:
-                headers['Host'] = netloc
-            # if 'Connection' not in headers:
-                # headers['Connection'] = b'close'
-            if userpass:
-                headers['Authorization'] = utf8('basic %s' % b64encode(userpass))
-            if req.body:
-                headers['Content-Length'] = str(len(utf8(req.body)))
-            for key, value in headers.get_all():
-                remote.write(utf8('%s: %s\r\n' % (key, value)))
-            remote.write('\r\n')
-            if req.body:
-                remote.write(utf8(body))
+                parsed = urlparse(req.url)
+                userpass = None
+                netloc = parsed.netloc
+                if '@' in parsed.netloc:
+                    userpass, _, netloc = netloc.rpartition("@")
+                headers = tornado.httputil.HTTPHeaders(headers)
 
-            self._auto_finish = False
-            client = self.request.connection.detach()
-            client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
-            client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
-            remote.set_close_callback(lambda client=client: not client.closed() and client.close())
-            remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
+                if parsed.scheme == 'https':
+                    # FIXME: doesn't work for https proxy
+                    remote.write(utf8('CONNECT %s:%s HTTP/1.1\r\n' % (parsed.hostname, parsed.port or 443)))
+                    remote.write(utf8('Host: %s\r\n' % netloc))
+                    if proxy.username:
+                        remote.write(utf8('Proxy-Authorization: Basic %s\r\n' %
+                                     b64encode('%s:%s' % (proxy.username, proxy.password))))
+                    remote.write('\r\n')
+                    yield remote.read_until('\r\n\r\n')
 
-            self._log()
-            return
+                    remote = yield remote.start_tls(False, {}, netloc)
+
+                    request_path = parsed.path
+                    if parsed.query:
+                        request_path += '?%s' % parsed.query
+                    remote.write(utf8('%s %s HTTP/1.1\r\n' % (req.method.upper(), urllib.quote(request_path))))
+                else:
+                    remote.write(utf8('%s %s HTTP/1.1\r\n' % (req.method.upper(), req.url)))
+                    if proxy.username:
+                        headers['Proxy-Authorization'] = 'Basic %s\r\n' % b64encode('%s:%s' % (proxy.username, proxy.password))
+
+                if 'Host' not in headers:
+                    headers['Host'] = netloc
+                # if 'Connection' not in headers:
+                    # headers['Connection'] = b'close'
+                if userpass:
+                    headers['Authorization'] = utf8('basic %s' % b64encode(userpass))
+                if req.body:
+                    headers['Content-Length'] = str(len(utf8(req.body)))
+                for key, value in headers.get_all():
+                    remote.write(utf8('%s: %s\r\n' % (key, value)))
+                remote.write('\r\n')
+                if req.body:
+                    remote.write(utf8(body))
+
+                self._auto_finish = False
+                client = self.request.connection.detach()
+                client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
+                client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
+                remote.set_close_callback(lambda client=client: not client.closed() and client.close())
+                remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
+
+                self._log()
+                return
 
         if kwargs.get('http_proxy'):
             # streaming in http proxy mode
@@ -351,7 +362,7 @@ class ProxyHandler(tornado.web.RequestHandler):
         self._log()
 
     def _request_summary(self):
-        if getattr(self, 'via_proxy'):
+        if getattr(self, 'via_proxy', None):
             return "%s %s via %s (%s)" % (self.request.method, self.request.uri,
                                           self.via_proxy.hostname, self.request.remote_ip)
         else:
