@@ -35,6 +35,10 @@ import tornado.httputil
 import tornado.tcpclient
 import tornado.httpclient
 
+def utf8(string):
+    if isinstance(string, unicode):
+        return string.encode('utf8')
+    return string
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'CONNECT', 'PUT', 'OPTIONS']
@@ -143,19 +147,19 @@ class ProxyHandler(tornado.web.RequestHandler):
                 allow_nonstandard_methods = True)
 
         if self.application.forward_proxies:
-            proxy = random.choice(self.application.forward_proxies)
+            self.via_proxy = proxy = random.choice(self.application.forward_proxies)
             try:
                 remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(
                     proxy.hostname, int(proxy.port), ssl_options={} if proxy.scheme == 'https' else None))
-                remote.write('%s %s HTTP/1.1\r\n' % (req.method.upper(), req.url))
+                remote.write(utf8('%s %s HTTP/1.1\r\n' % (req.method.upper(), req.url)))
                 for key, value in tornado.httputil.HTTPHeaders(headers).get_all():
-                    remote.write('%s: %s\r\n' % (key, value))
+                    remote.write(utf8('%s: %s\r\n' % (key, value)))
                 if proxy.username:
-                    remote.write('Proxy-Authorization: Basic %s\r\n' %
-                                 b64encode('%s:%s' % (proxy.username, proxy.password)))
+                    remote.write(utf8('Proxy-Authorization: Basic %s\r\n' %
+                                 b64encode('%s:%s' % (proxy.username, proxy.password))))
                 remote.write('\r\n')
                 if req.body:
-                    remote.write(body)
+                    remote.write(utf8(body))
             except gen.TimeoutError:
                 raise HTTPError(504)
 
@@ -280,15 +284,15 @@ class ProxyHandler(tornado.web.RequestHandler):
         client = self.request.connection.detach()
 
         if self.application.forward_proxies:
-            proxy = random.choice(self.application.forward_proxies)
+            self.via_proxy = proxy = random.choice(self.application.forward_proxies)
             try:
                 remote = yield gen.with_timeout(IOLoop.current().time()+10, tornado.tcpclient.TCPClient().connect(
                     proxy.hostname, int(proxy.port), ssl_options={} if proxy.scheme == 'https' else None))
-                remote.write('CONNECT %s HTTP/1.1\r\n' % self.request.uri)
-                remote.write('Host: %s\r\n' % self.request.uri)
+                remote.write(utf8('CONNECT %s HTTP/1.1\r\n' % self.request.uri))
+                remote.write(utf8('Host: %s\r\n' % self.request.uri))
                 if proxy.username:
-                    remote.write('Proxy-Authorization: Basic %s\r\n' %
-                                 b64encode('%s:%s' % (proxy.username, proxy.password)))
+                    remote.write(utf8('Proxy-Authorization: Basic %s\r\n' %
+                                 b64encode('%s:%s' % (proxy.username, proxy.password))))
                 remote.write('\r\n')
             except gen.TimeoutError:
                 raise HTTPError(504)
@@ -311,6 +315,14 @@ class ProxyHandler(tornado.web.RequestHandler):
             gen.Task(remote.set_close_callback),
         ]
         self._log()
+
+    def _request_summary(self):
+        if self.via_proxy:
+            return "%s %s via %s (%s)" % (self.request.method, self.request.uri,
+                                          self.via_proxy.hostname, self.request.remote_ip)
+        else:
+            return "%s %s (%s)" % (self.request.method, self.request.uri,
+                                   self.request.remote_ip)
 
 
 class Application(tornado.web.Application):
