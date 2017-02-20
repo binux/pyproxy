@@ -217,7 +217,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             self._auto_finish = False
             client = self.request.connection.detach()
             client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
-            client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
+            # not forward any further message to remote, as current request had finished
+            if kwargs.get('http_proxy'):
+                client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
             remote.set_close_callback(lambda client=client: not client.closed() and client.close())
             remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
 
