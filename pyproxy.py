@@ -82,7 +82,7 @@ class ProxyHandler(tornado.web.RequestHandler):
     def get(self):
         method = self.request.method
         url = self.request.uri
-        headers = self.request.headers
+        headers = tornado.httputil.HTTPHeaders(self.request.headers)
         body = self.request.body
 
         if self.request.uri.startswith('http'):
@@ -103,6 +103,14 @@ class ProxyHandler(tornado.web.RequestHandler):
                 headers[key] = value
         body = request.get('body', body)
         callback = request.get('callback', callback)
+
+        for key, values in self.request.arguments.items():
+            key = key.lower()
+            if key.startswith('h-'):
+                headers[key[2:]] = values[0].strip()
+            elif key.startswith('d-'):
+                if key[2:] in headers:
+                    del headers[key[2:]]
 
         if 'del_headers' in request:
             for key in request['del_headers']:
@@ -208,7 +216,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             else:
                 remote.write(utf8('%s %s HTTP/1.1\r\n' % (req.method.upper(), req.url)))
                 if proxy.username:
-                    headers['Proxy-Authorization'] = 'Basic %s\r\n' % b64encode('%s:%s' % (proxy.username, proxy.password))
+                    headers['Proxy-Authorization'] = 'Basic %s' % b64encode('%s:%s' % (proxy.username, proxy.password))
 
             if 'Host' not in headers:
                 headers['Host'] = netloc
@@ -224,10 +232,10 @@ class ProxyHandler(tornado.web.RequestHandler):
             remote.write('\r\n')
             if req.body:
                 remote.write(utf8(body))
+            yield remote.write(b'')
 
             self._auto_finish = False
             client = self.request.connection.detach()
-            client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
             # not forward any further message to remote, as current request had finished
             if kwargs.get('http_proxy'):
                 link(client, remote)
