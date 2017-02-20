@@ -201,8 +201,9 @@ class ProxyHandler(tornado.web.RequestHandler):
 
             if 'Host' not in headers:
                 headers['Host'] = netloc
-            # if 'Connection' not in headers:
-                # headers['Connection'] = b'close'
+            # force disable connection
+            if not kwargs.get('http_proxy'):
+                headers['Connection'] = b'close'
             if userpass:
                 headers['Authorization'] = utf8('basic %s' % b64encode(userpass))
             if req.body:
