@@ -43,10 +43,21 @@ try:
 except ImportError:
     pycurl = None
 
+
 def utf8(string):
     if isinstance(string, unicode):
         return string.encode('utf8')
     return string
+
+
+def link(a, b):
+    """
+    link stream a to stream b
+    """
+    a.read_until_close(lambda x: not b.closed() and b.write(b'', callback=b.close),
+                       streaming_callback=lambda x: not b.closed() and b.write(x))
+    b.set_close_callback(lambda: not a.closed() and a.write(b'', callback=a.close))
+
 
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'HEAD', 'CONNECT', 'PUT', 'OPTIONS']
@@ -183,10 +194,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                     channel_a, channel_b = socket._socketobject(_sock=channel_a), socket._socketobject(_sock=channel_b)
                 channel_a, channel_b = tornado.iostream.IOStream(channel_a), tornado.iostream.IOStream(channel_b)
 
-                channel_a.set_close_callback(lambda client=remote: not client.closed() and client.close())
-                channel_a.read_until_close(lambda x: x, streaming_callback=lambda x, client=remote: not client.closed() and client.write(x))
-                remote.set_close_callback(lambda client=channel_a: not client.closed() and client.close())
-                remote.read_until_close(lambda x: x, streaming_callback=lambda x, client=channel_a: not client.closed() and client.write(x))
+                link(channel_a, remote)
+                link(remote, channel_a)
 
                 remote = yield channel_b.start_tls(False, {}, netloc)
 
@@ -219,9 +228,8 @@ class ProxyHandler(tornado.web.RequestHandler):
             client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
             # not forward any further message to remote, as current request had finished
             if kwargs.get('http_proxy'):
-                client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
-            remote.set_close_callback(lambda client=client: not client.closed() and client.close())
-            remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
+                link(client, remote)
+            link(remote, client)
 
             self._log()
             return
@@ -358,10 +366,8 @@ class ProxyHandler(tornado.web.RequestHandler):
                 raise HTTPError(504)
             yield client.write(b'HTTP/1.0 200 Connection established\r\n\r\n')
 
-        client.set_close_callback(lambda remote=remote: not remote.closed() and remote.close())
-        client.read_until_close(lambda x: x, streaming_callback=lambda x: not remote.closed() and remote.write(x))
-        remote.set_close_callback(lambda client=client: not client.closed() and client.close())
-        remote.read_until_close(lambda x: x, streaming_callback=lambda x: not client.closed() and client.write(x))
+        link(client, remote)
+        link(remote, client)
 
         yield [
             gen.Task(client.set_close_callback),
