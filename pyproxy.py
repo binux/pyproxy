@@ -98,7 +98,9 @@ class ProxyHandler(tornado.web.RequestHandler):
             request = {}
         url = request.get('url', url)
         method = request.get('method', method)
-        headers = request.get('headers', headers)
+        if 'headers' in request:
+            for key, value in request['headers'].items():
+                headers[key] = value
         body = request.get('body', body)
         callback = request.get('callback', callback)
 
